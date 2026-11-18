@@ -27,7 +27,7 @@ class ApiClient {
   factory ApiClient() => _instance;
 
   static const String _baseUrl =
-      String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:8787');
+      String.fromEnvironment('API_BASE_URL', defaultValue: 'http://43.204.215.17');
   static const String _tokenKey = 'auth_token';
 
   static final http.Client _client = http.Client();
