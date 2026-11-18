@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
 import { createServer } from "http";
+import { getRequestListener } from "@hono/node-server";
 import { WebSocketServer, WebSocket } from "ws";
 
 import authRoutes from "./routes/auth";
@@ -242,20 +243,7 @@ export class WebSocketHub {
 
 const port = parseInt(process.env.PORT ?? "8787", 10);
 
-const server = createServer(async (req, res) => {
-  try {
-    const response = await app.fetch(req as unknown as Request);
-    response.headers.forEach((value, key) => {
-      res.setHeader(key, value);
-    });
-    res.writeHead(response.status);
-    const body = await response.text();
-    res.end(body);
-  } catch (err) {
-    res.writeHead(500);
-    res.end("Internal Server Error");
-  }
-});
+const server = createServer(getRequestListener(app.fetch));
 
 const wss = new WebSocketServer({ server, path: "/ws" });
 export const hub = new WebSocketHub(wss);
