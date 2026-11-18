@@ -4,16 +4,16 @@ import { D1Service } from "../services/d1.service";
 import { JWTService, JWTPayload } from "../services/jwt.service";
 
 const d1 = new D1Service(
-  process.env.CLOUDFLARE_ACCOUNT_ID!,
-  process.env.D1_DATABASE_ID!,
-  process.env.D1_API_TOKEN!
+  process.env.D1_ACCOUNT_ID ?? process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
+  process.env.D1_DATABASE_ID ?? "",
+  process.env.D1_API_TOKEN ?? ""
 );
 
 const jwtService = new JWTService(
-  process.env.JWT_ACCESS_SECRET!,
-  process.env.JWT_REFRESH_SECRET!,
-  process.env.JWT_ACCESS_EXPIRES_IN ?? "15m",
-  process.env.JWT_REFRESH_EXPIRES_IN ?? "7d",
+  process.env.JWT_ACCESS_SECRET ?? "",
+  process.env.JWT_REFRESH_SECRET ?? "",
+  process.env.JWT_ACCESS_EXPIRY ?? process.env.JWT_ACCESS_EXPIRES_IN ?? "15m",
+  process.env.JWT_REFRESH_EXPIRY ?? process.env.JWT_REFRESH_EXPIRES_IN ?? "30d",
   d1
 );
 

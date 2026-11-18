@@ -37,6 +37,32 @@ app.get("/health", (c) => {
   });
 });
 
+app.get("/app/version", (c) => {
+  return c.json({
+    latestVersion: "1.0.1",
+    versionCode: 2,
+    minVersion: "1.0.0",
+    updateUrl: "http://43.204.215.17/storage/updates/neem-release.apk",
+    downloadUrl: "http://43.204.215.17/storage/updates/neem-release.apk",
+    releaseNotes:
+      "• Stay logged in across restarts\n• Phone number input simplified without +91\n• Removed phone autofill suggestions\n• Smooth tab navigation for Pulse, Circles & Profile\n• All demo/fake data removed\n• Manual post creation with category & zone\n• Live Cloud R2 user storage files",
+    forceUpdate: false,
+  });
+});
+
+app.get("/api/v1/app/version", (c) => {
+  return c.json({
+    latestVersion: "1.0.1",
+    versionCode: 2,
+    minVersion: "1.0.0",
+    updateUrl: "http://43.204.215.17/storage/updates/neem-release.apk",
+    downloadUrl: "http://43.204.215.17/storage/updates/neem-release.apk",
+    releaseNotes:
+      "• Stay logged in across restarts\n• Phone number input simplified without +91\n• Removed phone autofill suggestions\n• Smooth tab navigation for Pulse, Circles & Profile\n• All demo/fake data removed\n• Manual post creation with category & zone\n• Live Cloud R2 user storage files",
+    forceUpdate: false,
+  });
+});
+
 app.route("/auth", authRoutes);
 app.route("/posts", postsRoutes);
 app.route("/circles", circlesRoutes);

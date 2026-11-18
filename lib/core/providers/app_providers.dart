@@ -62,6 +62,10 @@ class AuthNotifier extends ChangeNotifier {
     );
   }
 
+  Future<bool> tryRestoreSession() async {
+    return await _authService.tryRestoreSession();
+  }
+
   Future<void> logout() async {
     await _authService.logout();
   }

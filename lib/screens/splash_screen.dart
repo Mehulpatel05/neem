@@ -51,10 +51,8 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(AppMotion.slower);
     if (!mounted) return;
 
-    final authService = context.read<AuthNotifier>().authService;
-    final isAuthenticated =
-        authService.authState == AuthState.authenticated &&
-        _isJwtValid(authService.accessToken);
+    final authNotifier = context.read<AuthNotifier>();
+    final isAuthenticated = await authNotifier.tryRestoreSession();
 
     if (!mounted || _navigating) return;
     _navigating = true;

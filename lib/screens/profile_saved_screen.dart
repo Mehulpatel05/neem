@@ -5,6 +5,7 @@ import '../../core/providers/app_providers.dart';
 import '../../core/network/api_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/services/update_service.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/app_chip.dart';
@@ -13,7 +14,8 @@ import '../../models/user.dart';
 import '../../models/post.dart';
 
 class ProfileSavedScreen extends StatefulWidget {
-  const ProfileSavedScreen({super.key});
+  final bool isEmbedded;
+  const ProfileSavedScreen({super.key, this.isEmbedded = false});
 
   @override
   State<ProfileSavedScreen> createState() => _ProfileSavedScreenState();
@@ -23,96 +25,22 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  final User _user = User(
-    id: 'user_1',
-    phoneNumber: '+1 555 0123',
-    displayName: 'Alex Rivera',
-    handle: '@alex.r',
-    city: 'Brooklyn',
-    zone: 'Downtown',
-    interests: const ['Food', 'Music', 'Art'],
-    trustScore: 92,
-    avatarUrl: 'https://i.pravatar.cc/150?u=alex',
+  final User _defaultUser = User(
+    id: '',
+    phoneNumber: '',
+    displayName: 'Neem Resident',
+    handle: '@resident',
+    city: 'Local',
+    zone: 'Neighborhood',
+    interests: const [],
+    trustScore: 80,
+    avatarUrl: null,
     isAnonymous: false,
-    createdAt: DateTime(2023, 5, 12),
+    createdAt: DateTime.now(),
   );
 
-  final List<Post> _bookmarks = [
-    Post(
-      id: 'post_1',
-      authorId: 'user_2',
-      category: 'Food',
-      zone: 'Downtown',
-      content: 'Best tacos in the city, hands down.',
-      isAnonymous: false,
-      upvotes: 142,
-      bookmarksCount: 87,
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      authorName: 'Jamie Lin',
-      authorHandle: '@jamie.l',
-    ),
-    Post(
-      id: 'post_2',
-      authorId: 'user_3',
-      category: 'Music',
-      zone: 'Williamsburg',
-      content: 'Live jazz at the waterfront this weekend.',
-      isAnonymous: false,
-      upvotes: 98,
-      bookmarksCount: 54,
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      authorName: 'Sam Ortiz',
-      authorHandle: '@sam.o',
-    ),
-    Post(
-      id: 'post_3',
-      authorId: 'user_4',
-      category: 'Art',
-      zone: 'DUMBO',
-      content: 'New mural opened on Front Street.',
-      isAnonymous: true,
-      upvotes: 210,
-      bookmarksCount: 132,
-      createdAt: DateTime.now().subtract(const Duration(days: 3)),
-    ),
-    Post(
-      id: 'post_4',
-      authorId: 'user_5',
-      category: 'Food',
-      zone: 'Downtown',
-      content: 'Hidden speakeasy with great small plates.',
-      isAnonymous: false,
-      upvotes: 67,
-      bookmarksCount: 41,
-      createdAt: DateTime.now().subtract(const Duration(days: 5)),
-      authorName: 'Taylor Kim',
-      authorHandle: '@taylor.k',
-    ),
-  ];
-
-  final List<_Circle> _circles = [
-    _Circle(
-      id: 'circle_1',
-      title: 'Weekend Coffee Meetup',
-      city: 'Brooklyn',
-      zone: 'Downtown',
-      memberCount: 24,
-    ),
-    _Circle(
-      id: 'circle_2',
-      title: 'Sunset Running Club',
-      city: 'Queens',
-      zone: 'Astoria',
-      memberCount: 31,
-    ),
-    _Circle(
-      id: 'circle_3',
-      title: 'Urban Sketching Circle',
-      city: 'Manhattan',
-      zone: 'Chelsea',
-      memberCount: 18,
-    ),
-  ];
+  final List<Post> _bookmarks = [];
+  final List<_Circle> _circles = [];
 
   final List<_Badge> _badges = [
     _Badge(
@@ -213,54 +141,95 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
+    final content = Column(
+      children: [
+        _buildHeader(theme, colorScheme),
+        const SizedBox(height: 16),
+        _buildTabBar(theme, colorScheme),
+        const SizedBox(height: 16),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildBookmarksTab(theme, colorScheme),
+              _buildCirclesTab(theme, colorScheme),
+              _buildBadgesTab(theme, colorScheme),
+              _buildCloudFilesTab(theme, colorScheme),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (widget.isEmbedded) {
+      return content;
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profile'),
+        title: const Text('My Profile & Storage'),
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: _goToSettings,
-            tooltip: 'Edit profile',
+            icon: const Icon(Icons.system_update_alt_outlined),
+            onPressed: () => InAppUpdateService.checkForUpdate(
+              context,
+              showNoUpdateToast: true,
+            ),
+            tooltip: 'Check for Updates',
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Log Out'),
+                  content:
+                      const Text('Are you sure you want to log out of Neem?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        Navigator.of(ctx).pop();
+                        await context.read<AuthNotifier>().logout();
+                        if (context.mounted) {
+                          Navigator.of(context).pushNamedAndRemoveUntil(
+                            AppRouter.login,
+                            (route) => false,
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Log Out'),
+                    ),
+                  ],
+                ),
+              );
+            },
+            tooltip: 'Log out',
           ),
         ],
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(theme, colorScheme),
-            const SizedBox(height: 16),
-            _buildTabBar(theme, colorScheme),
-            const SizedBox(height: 16),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildBookmarksTab(theme, colorScheme),
-                  _buildCirclesTab(theme, colorScheme),
-                  _buildBadgesTab(theme, colorScheme),
-                  _buildCloudFilesTab(theme, colorScheme),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _goToSettings,
-        label: const Text('Edit Profile'),
-        icon: const Icon(Icons.person_outline),
-      ),
+      body: SafeArea(child: content),
     );
   }
 
   Widget _buildHeader(ThemeData theme, ColorScheme colorScheme) {
     final currentUser = context.watch<AuthNotifier>().currentUser;
-    final displayName = currentUser?['displayName'] ?? currentUser?['name'] ?? _user.displayName;
-    final handle = currentUser?['handle'] ?? _user.handle ?? '';
-    final city = currentUser?['city'] ?? _user.city ?? 'Local';
-    final zone = currentUser?['zone'] ?? _user.zone ?? 'Community';
-    final avatarUrl = currentUser?['avatarUrl'] ?? _user.avatarUrl;
+    final displayName = currentUser?['displayName'] ??
+        currentUser?['name'] ??
+        _defaultUser.displayName;
+    final handle = currentUser?['handle'] ?? _defaultUser.handle ?? '';
+    final city = currentUser?['city'] ?? _defaultUser.city ?? 'Local';
+    final zone = currentUser?['zone'] ?? _defaultUser.zone ?? 'Community';
+    final avatarUrl = currentUser?['avatarUrl'] ?? _defaultUser.avatarUrl;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -300,13 +269,13 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               AppChip(
-                label: 'Trust ${_user.trustScore}',
+                label: 'Trust ${_defaultUser.trustScore}',
                 avatar: const Icon(
                   Icons.shield,
                   size: 16,
                   color: Colors.white,
                 ),
-                color: _user.trustScore >= 80
+                color: _defaultUser.trustScore >= 80
                     ? AppColors.success
                     : colorScheme.primary,
                 selected: true,
@@ -372,6 +341,31 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
   }
 
   Widget _buildBookmarksTab(ThemeData theme, ColorScheme colorScheme) {
+    if (_bookmarks.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.bookmark_border,
+              size: 64,
+              color: colorScheme.onSurface.withOpacity(0.3),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'No bookmarks yet',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Save posts from the City Pulse feed to find them here.',
+              style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
+            ),
+          ],
+        ),
+      );
+    }
+
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -391,7 +385,7 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: ColoredBox(
-                    color: colorScheme.surfaceVariant.withOpacity(0.5),
+                    color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
                     child: Center(
                       child: Icon(
                         Icons.bookmark_border,
@@ -457,6 +451,31 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
   }
 
   Widget _buildCirclesTab(ThemeData theme, ColorScheme colorScheme) {
+    if (_circles.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.groups_outlined,
+              size: 64,
+              color: colorScheme.onSurface.withOpacity(0.3),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'No circles joined yet',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Join or create meetups in the Circles tab.',
+              style: TextStyle(color: colorScheme.onSurface.withOpacity(0.5)),
+            ),
+          ],
+        ),
+      );
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _circles.length,

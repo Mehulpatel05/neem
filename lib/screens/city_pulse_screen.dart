@@ -10,6 +10,9 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/app_chip.dart';
 import '../../widgets/app_button.dart';
 import '../../app_router.dart';
+import '../../core/network/api_client.dart';
+import 'circles_meetups_screen.dart';
+import 'profile_saved_screen.dart';
 
 enum TrustLevel { verified, trusted, newMember }
 
@@ -37,15 +40,6 @@ extension _TrustLevelExtension on TrustLevel {
   }
 }
 
-const Map<String, TrustLevel> _postTrustLevels = {
-  'p1': TrustLevel.verified,
-  'p2': TrustLevel.verified,
-  'p3': TrustLevel.trusted,
-  'p4': TrustLevel.newMember,
-  'p5': TrustLevel.trusted,
-  'p6': TrustLevel.newMember,
-};
-
 String _relativeTime(DateTime time) {
   final diff = DateTime.now().difference(time);
   if (diff.inDays > 0) return '${diff.inDays}d ago';
@@ -64,13 +58,16 @@ class CityPulseScreen extends StatefulWidget {
 class _CityPulseScreenState extends State<CityPulseScreen>
     with SingleTickerProviderStateMixin {
   bool _cityView = true;
-  int _unseenCount = 12;
+  int _unseenCount = 0;
   String _selectedCategory = 'All';
   String? _selectedZone;
   int _bottomIndex = 0;
   final Set<String> _bookmarked = {};
   final TextEditingController _searchController = TextEditingController();
   late final AnimationController _pulseController;
+
+  List<Post> _posts = [];
+  bool _isLoading = false;
 
   static const List<String> _categories = [
     'All',
@@ -83,87 +80,6 @@ class _CityPulseScreenState extends State<CityPulseScreen>
 
   static const List<String> _zones = ['Downtown', 'Uptown', 'Midtown', 'Suburbs'];
 
-  final List<Post> _posts = [
-    Post(
-      id: 'p1',
-      authorId: 'u1',
-      category: 'Events',
-      zone: 'Downtown',
-      content: 'Community garden cleanup this Saturday at Riverside Park, 9 AM. Gloves and bags provided.',
-      isAnonymous: false,
-      upvotes: 24,
-      bookmarksCount: 3,
-      createdAt: DateTime(2026, 11, 17, 14, 30),
-      authorName: 'Maya Chen',
-      authorHandle: 'mayac',
-    ),
-    Post(
-      id: 'p2',
-      authorId: 'u2',
-      category: 'Alerts',
-      zone: 'Uptown',
-      content: 'Water main repair on 5th Avenue. Expect low water pressure between 6th and 8th until 4 PM.',
-      isAnonymous: false,
-      upvotes: 41,
-      bookmarksCount: 7,
-      createdAt: DateTime(2026, 11, 17, 11, 15),
-      authorName: 'Jordan Lee',
-      authorHandle: 'jordanl',
-    ),
-    Post(
-      id: 'p3',
-      authorId: 'u3',
-      category: 'Lost & Found',
-      zone: 'Midtown',
-      content: 'Found: orange tabby cat near Central Library, wearing a collar with a tag. Drop off at Midtown vet clinic.',
-      isAnonymous: false,
-      upvotes: 18,
-      bookmarksCount: 2,
-      createdAt: DateTime(2026, 11, 17, 9, 0),
-      authorName: 'Sam Rivera',
-      authorHandle: 'samr',
-    ),
-    Post(
-      id: 'p4',
-      authorId: 'u4',
-      category: 'Recommendations',
-      zone: 'Suburbs',
-      content: 'Best coffee roaster in the suburbs? Looking for good espresso and outdoor seating.',
-      isAnonymous: false,
-      upvotes: 32,
-      bookmarksCount: 5,
-      createdAt: DateTime(2026, 11, 16, 16, 45),
-      authorName: 'Alex Kim',
-      authorHandle: 'alexk',
-    ),
-    Post(
-      id: 'p5',
-      authorId: 'u5',
-      category: 'Meetups',
-      zone: 'Downtown',
-      content: 'Sunday morning running club. Meet at the clock tower at 7 AM. All paces welcome.',
-      isAnonymous: false,
-      upvotes: 27,
-      bookmarksCount: 4,
-      createdAt: DateTime(2026, 11, 16, 12, 0),
-      authorName: 'Taylor Brooks',
-      authorHandle: 'taylorb',
-    ),
-    Post(
-      id: 'p6',
-      authorId: 'u6',
-      category: 'Events',
-      zone: 'Uptown',
-      content: 'Street fair this weekend on Main Street, 11 AM to 8 PM. Local vendors and live music.',
-      isAnonymous: true,
-      upvotes: 15,
-      bookmarksCount: 1,
-      createdAt: DateTime(2026, 11, 15, 19, 20),
-      authorName: null,
-      authorHandle: null,
-    ),
-  ];
-
   List<Post> get _filteredPosts {
     final query = _searchController.text.trim().toLowerCase();
     return _posts.where((post) {
@@ -175,7 +91,8 @@ class _CityPulseScreenState extends State<CityPulseScreen>
       }
       if (query.isNotEmpty) {
         final haystack =
-            '${post.category} ${post.zone} ${post.authorName ?? ''} ${post.content}'.toLowerCase();
+            '${post.category} ${post.zone} ${post.authorName ?? ''} ${post.content}'
+                .toLowerCase();
         if (!haystack.contains(query)) return false;
       }
       return true;
@@ -189,6 +106,8 @@ class _CityPulseScreenState extends State<CityPulseScreen>
       vsync: this,
       duration: AppMotion.slow,
     )..repeat(reverse: true);
+    _fetchPosts();
+    _fetchUnreadNotifications();
   }
 
   @override
@@ -196,6 +115,40 @@ class _CityPulseScreenState extends State<CityPulseScreen>
     _searchController.dispose();
     _pulseController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchPosts() async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await ApiClient.get('/api/v1/posts');
+      final list =
+          res is Map ? (res['posts'] as List?) : (res is List ? res : null);
+      if (list != null && mounted) {
+        setState(() {
+          _posts = list
+              .map((item) => Post.fromJson(item as Map<String, dynamic>))
+              .toList();
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _posts = []);
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchUnreadNotifications() async {
+    try {
+      final res = await ApiClient.get('/api/v1/notifications');
+      final list =
+          res is Map ? (res['notifications'] as List?) : (res is List ? res : null);
+      if (list != null && mounted) {
+        final unread = list.where((item) => item['isRead'] != true && item['is_read'] != 1).length;
+        setState(() => _unseenCount = unread);
+      }
+    } catch (_) {}
   }
 
   void _toggleArea(bool city) {
@@ -216,20 +169,212 @@ class _CityPulseScreenState extends State<CityPulseScreen>
   }
 
   Future<void> _onRefresh() async {
-    await Future<void>.delayed(AppMotion.fast);
-    if (!mounted) return;
-    setState(() {
-      _unseenCount = 0;
-    });
+    await _fetchPosts();
+    await _fetchUnreadNotifications();
   }
 
-  void _onCreatePost() {
+  void _showManualCreatePostSheet() {
     final auth = context.read<AuthNotifier>();
     if (!auth.isAuthenticated) {
       Navigator.of(context).pushNamed(AppRouter.login);
       return;
     }
-    Navigator.of(context).pushNamed(AppRouter.aiCreateSheet);
+
+    final currentUser = auth.currentUser;
+    final defaultZone = currentUser?['zone'] ?? 'Downtown';
+    final defaultCity = currentUser?['city'] ?? 'Local';
+
+    final contentCtrl = TextEditingController();
+    final zoneCtrl = TextEditingController(text: defaultZone);
+    String selectedCat = 'Events';
+    bool isAnonymous = false;
+    bool isSubmitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 20,
+                right: 20,
+                top: 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Create New Post',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: contentCtrl,
+                      maxLines: 4,
+                      maxLength: 280,
+                      decoration: const InputDecoration(
+                        hintText: "What's happening in your neighborhood?",
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.all(12),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Category',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: _categories
+                          .where((c) => c != 'All')
+                          .map((cat) {
+                        final isSel = selectedCat == cat;
+                        return ChoiceChip(
+                          label: Text(cat),
+                          selected: isSel,
+                          onSelected: (val) {
+                            if (val) setSheetState(() => selectedCat = cat);
+                          },
+                          selectedColor: const Color(0xFF2E7D32),
+                          labelStyle: TextStyle(
+                            color: isSel ? Colors.white : Colors.black87,
+                            fontSize: 12,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: zoneCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Neighborhood / Zone',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Post anonymously'),
+                      subtitle: const Text('Hide your name and profile'),
+                      value: isAnonymous,
+                      onChanged: (val) => setSheetState(() => isAnonymous = val),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              final text = contentCtrl.text.trim();
+                              if (text.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Please enter post content'),
+                                  ),
+                                );
+                                return;
+                              }
+
+                              setSheetState(() => isSubmitting = true);
+                              try {
+                                await ApiClient.post('/api/v1/posts', body: {
+                                  'content': text,
+                                  'category': selectedCat,
+                                  'zone': zoneCtrl.text.trim().isEmpty
+                                      ? defaultZone
+                                      : zoneCtrl.text.trim(),
+                                  'city': defaultCity,
+                                  'isAnonymous': isAnonymous,
+                                });
+
+                                if (sheetContext.mounted) {
+                                  Navigator.of(sheetContext).pop();
+                                }
+
+                                if (mounted) {
+                                  setState(() => _bottomIndex = 0);
+                                  _fetchPosts();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Post published successfully!'),
+                                      backgroundColor: Color(0xFF2E7D32),
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                setSheetState(() => isSubmitting = false);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Failed to post: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2E7D32),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: isSubmitting
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Publish Post',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _buildUnseenBadge() {
@@ -238,9 +383,9 @@ class _CityPulseScreenState extends State<CityPulseScreen>
       children: [
         IconButton(
           icon: const Icon(Icons.notifications_outlined),
-          onPressed: () {
-            Navigator.of(context).pushNamed(AppRouter.notifications);
-            setState(() => _unseenCount = 0);
+          onPressed: () async {
+            await Navigator.of(context).pushNamed(AppRouter.notifications);
+            _fetchUnreadNotifications();
           },
         ),
         if (_unseenCount > 0)
@@ -256,7 +401,7 @@ class _CityPulseScreenState extends State<CityPulseScreen>
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.shadowLight.withOpacity(0.4),
+                      color: AppColors.shadowLight.withValues(alpha: 0.4),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),
@@ -352,47 +497,180 @@ class _CityPulseScreenState extends State<CityPulseScreen>
           Expanded(
             child: TextField(
               controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Ask the city anything...',
-                prefixIcon: const Icon(Icons.search),
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                hintText: 'Search neighborhood posts...',
+                prefixIcon: Icon(Icons.search),
                 filled: true,
-                contentPadding: const EdgeInsets.symmetric(
+                contentPadding: EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 14,
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          AppButton(
-            text: 'Ask',
-            onPressed: () => _searchController.clear(),
-            type: AppButtonType.primary,
-            width: 88,
-          ),
+          if (_searchController.text.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.clear),
+              onPressed: () {
+                _searchController.clear();
+                setState(() {});
+              },
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildFeed() {
+  Widget _buildCategoryRow() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: _categories.map((cat) {
+          final isSel = _selectedCategory == cat;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(cat),
+              selected: isSel,
+              onSelected: (val) {
+                if (val) setState(() => _selectedCategory = cat);
+              },
+              selectedColor: const Color(0xFF2E7D32),
+              labelStyle: TextStyle(
+                color: isSel ? Colors.white : Colors.black87,
+                fontSize: 12,
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildPulseFeed() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    if (_isLoading) {
+      return const Expanded(
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Expanded(
       child: RefreshIndicator(
         onRefresh: _onRefresh,
-        child: ListView.builder(
-          itemCount: _filteredPosts.length,
-          itemBuilder: (context, index) {
-            final post = _filteredPosts[index];
-            return PostCard(
-              key: ValueKey(post.id),
-              post: post,
-              isBookmarked: _bookmarked.contains(post.id),
-              onBookmarkToggle: () => _toggleBookmark(post.id),
-            );
-          },
-        ),
+        child: _filteredPosts.isEmpty
+            ? ListView(
+                children: [
+                  SizedBox(height: MediaQuery.of(context).size.height * 0.15),
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            size: 64,
+                            color: colorScheme.onSurface.withValues(alpha: 0.3),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No posts found',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Be the first neighbor to post an update, alert, or recommendation!',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton.icon(
+                            onPressed: _showManualCreatePostSheet,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Create Post'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2E7D32),
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : ListView.builder(
+                itemCount: _filteredPosts.length,
+                itemBuilder: (context, index) {
+                  final post = _filteredPosts[index];
+                  return PostCard(
+                    key: ValueKey(post.id),
+                    post: post,
+                    isBookmarked: _bookmarked.contains(post.id),
+                    onBookmarkToggle: () => _toggleBookmark(post.id),
+                  );
+                },
+              ),
       ),
     );
+  }
+
+  Widget _buildPulseView() {
+    return Column(
+      children: [
+        _buildAreaSwitch(),
+        _buildSearchBar(),
+        _buildCategoryRow(),
+        const SizedBox(height: 8),
+        _buildPulseFeed(),
+      ],
+    );
+  }
+
+  String _getTitleForTab() {
+    switch (_bottomIndex) {
+      case 0:
+        return 'City Pulse';
+      case 1:
+        return 'Meetups & Circles';
+      case 2:
+        return 'My Profile & Storage';
+      default:
+        return 'Neem';
+    }
+  }
+
+  List<Widget> _getActionsForTab() {
+    if (_bottomIndex == 0) {
+      return [_buildUnseenBadge()];
+    } else if (_bottomIndex == 1) {
+      return [
+        IconButton(
+          icon: const Icon(Icons.add_circle_outline),
+          onPressed: () => Navigator.of(context).pushNamed(AppRouter.createMeetup),
+          tooltip: 'Create Meetup',
+        ),
+      ];
+    } else {
+      return [
+        IconButton(
+          icon: const Icon(Icons.settings_outlined),
+          onPressed: () => Navigator.of(context).pushNamed(AppRouter.settings),
+          tooltip: 'Settings',
+        ),
+      ];
+    }
   }
 
   @override
@@ -401,29 +679,31 @@ class _CityPulseScreenState extends State<CityPulseScreen>
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        title: const Text('City Pulse'),
+        title: Text(_getTitleForTab()),
         centerTitle: true,
-        actions: [
-          _buildUnseenBadge(),
-        ],
+        actions: _getActionsForTab(),
       ),
-      body: Column(
+      body: IndexedStack(
+        index: _bottomIndex,
         children: [
-          _buildAreaSwitch(),
-          _buildSearchBar(),
-          _buildFeed(),
+          _buildPulseView(),
+          const CirclesMeetupsScreen(isEmbedded: true),
+          const ProfileSavedScreen(isEmbedded: true),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _onCreatePost,
-        child: const Icon(Icons.create),
+        onPressed: _showManualCreatePostSheet,
+        backgroundColor: const Color(0xFF2E7D32),
+        foregroundColor: Colors.white,
+        tooltip: 'Create Post',
+        child: const Icon(Icons.add),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _bottomIndex,
         onTap: (index) => setState(() => _bottomIndex = index),
+        selectedItemColor: const Color(0xFF2E7D32),
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
@@ -432,10 +712,12 @@ class _CityPulseScreenState extends State<CityPulseScreen>
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.groups_outlined),
+            activeIcon: Icon(Icons.groups),
             label: 'Circles',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outlined),
+            activeIcon: Icon(Icons.person),
             label: 'Profile',
           ),
         ],
@@ -460,7 +742,9 @@ class PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final trust = _postTrustLevels[post.id] ?? TrustLevel.newMember;
+    final trust = post.upvotes > 20
+        ? TrustLevel.verified
+        : (post.upvotes > 5 ? TrustLevel.trusted : TrustLevel.newMember);
 
     return AppCard(
       margin: const EdgeInsets.fromLTRB(20, 0, 20, 12),
@@ -483,7 +767,7 @@ class PostCard extends StatelessWidget {
                     Row(
                       children: [
                         Text(
-                          post.authorName ?? 'Anonymous',
+                          post.authorName ?? 'Anonymous Neighbor',
                           style: theme.textTheme.labelLarge?.copyWith(
                             fontWeight: FontWeight.w700,
                             color: colorScheme.onSurface,
@@ -497,7 +781,7 @@ class PostCard extends StatelessWidget {
                     Text(
                       _relativeTime(post.createdAt),
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.5),
+                        color: colorScheme.onSurface.withValues(alpha: 0.5),
                       ),
                     ),
                   ],
@@ -525,7 +809,7 @@ class PostCard extends StatelessWidget {
           Text(
             post.content,
             style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurface.withOpacity(0.85),
+              color: colorScheme.onSurface.withValues(alpha: 0.85),
               height: 1.4,
             ),
           ),
@@ -543,7 +827,12 @@ class PostCard extends StatelessWidget {
               const SizedBox(width: 16),
               IconButton(
                 icon: const Icon(Icons.comment_outlined),
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.of(context).pushNamed(
+                    AppRouter.postDetail,
+                    arguments: post,
+                  );
+                },
                 tooltip: 'Comment',
               ),
               const SizedBox(width: 16),
@@ -556,7 +845,7 @@ class PostCard extends StatelessWidget {
               Text(
                 _relativeTime(post.createdAt),
                 style: theme.textTheme.labelSmall?.copyWith(
-                  color: colorScheme.onSurface.withOpacity(0.5),
+                  color: colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
               ),
             ],
@@ -577,10 +866,10 @@ class _TrustBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: trust.color.withOpacity(0.15),
+        color: trust.color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: trust.color.withOpacity(0.4),
+          color: trust.color.withValues(alpha: 0.4),
           width: 0.5,
         ),
       ),

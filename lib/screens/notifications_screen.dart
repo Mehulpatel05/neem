@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../widgets/app_card.dart';
 import '../../app_router.dart';
 import '../../models/notification.dart';
+import '../../core/network/api_client.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -14,69 +15,58 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   List<NotificationItem> _notifications = [];
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _notifications = [
-      NotificationItem(
-        id: 'n1',
-        type: 'like',
-        title: 'Liked your post',
-        body: 'Alex Kim liked your community garden post.',
-        isRead: false,
-        createdAt: DateTime(2026, 11, 18, 10, 15),
-      ),
-      NotificationItem(
-        id: 'n2',
-        type: 'comment',
-        title: 'New comment',
-        body: 'Jordan Lee commented on your meetup event.',
-        isRead: true,
-        createdAt: DateTime(2026, 11, 18, 9, 30),
-      ),
-      NotificationItem(
-        id: 'n3',
-        type: 'follow',
-        title: 'New follower',
-        body: 'Sam Rivera started following you.',
-        isRead: false,
-        createdAt: DateTime(2026, 11, 17, 16, 45),
-      ),
-      NotificationItem(
-        id: 'n4',
-        type: 'mention',
-        title: 'Mentioned you',
-        body: 'Taylor Brooks mentioned you in a comment.',
-        isRead: true,
-        createdAt: DateTime(2026, 11, 17, 14, 0),
-      ),
-      NotificationItem(
-        id: 'n5',
-        type: 'system',
-        title: 'System update',
-        body: 'Neem v2.1.0 is now available with new safety features.',
-        isRead: false,
-        createdAt: DateTime(2026, 11, 16, 11, 0),
-      ),
-    ];
+    _fetchNotifications();
+  }
+
+  Future<void> _fetchNotifications() async {
+    setState(() => _isLoading = true);
+    try {
+      final res = await ApiClient.get('/api/v1/notifications');
+      final list = res is Map ? (res['notifications'] as List?) : (res is List ? res : null);
+      if (list != null && mounted) {
+        setState(() {
+          _notifications = list
+              .map((item) => NotificationItem.fromJson(item as Map<String, dynamic>))
+              .toList();
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _notifications = [];
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   int get _unreadCount => _notifications.where((n) => !n.isRead).length;
 
-  void _markRead(String id) {
+  Future<void> _markRead(String id) async {
     setState(() {
       final index = _notifications.indexWhere((n) => n.id == id);
       if (index != -1) {
         _notifications[index] = _notifications[index].copyWith(isRead: true);
       }
     });
+    try {
+      await ApiClient.put('/api/v1/notifications/$id/read', body: {});
+    } catch (_) {}
   }
 
-  void _markAllRead() {
+  Future<void> _markAllRead() async {
     setState(() {
       _notifications = _notifications.map((n) => n.copyWith(isRead: true)).toList();
     });
+    try {
+      await ApiClient.post('/api/v1/notifications/mark-all-read', body: {});
+    } catch (_) {}
   }
 
   String _relativeTime(DateTime time) {
@@ -230,29 +220,46 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
         ],
       ),
-      body: _notifications.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.notifications_none,
-                    size: 64,
-                    color: colorScheme.onSurface.withOpacity(0.3),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No notifications',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ],
-              ),
-            )
-          : ListView.builder(
-              itemCount: _notifications.length,
-              itemBuilder: (context, index) {
-                return _buildNotificationItem(_notifications[index]);
-              },
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _fetchNotifications,
+              child: _notifications.isEmpty
+                  ? ListView(
+                      children: [
+                        SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+                        Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.notifications_none,
+                                size: 64,
+                                color: colorScheme.onSurface.withOpacity(0.3),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No notifications yet',
+                                style: theme.textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                "You're all caught up with your neighborhood!",
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: colorScheme.onSurface.withOpacity(0.5),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : ListView.builder(
+                      itemCount: _notifications.length,
+                      itemBuilder: (context, index) {
+                        return _buildNotificationItem(_notifications[index]);
+                      },
+                    ),
             ),
     );
   }

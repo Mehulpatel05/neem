@@ -56,6 +56,7 @@ class AuthService extends ChangeNotifier {
 
       if (_accessToken != null) {
         await SecureStorage.write('accessToken', _accessToken!);
+        await SecureStorage.write('auth_token', _accessToken!);
       }
       if (_refreshToken != null) {
         await SecureStorage.write('refreshToken', _refreshToken!);
@@ -84,6 +85,7 @@ class AuthService extends ChangeNotifier {
       _accessToken = response['accessToken'] as String?;
       if (_accessToken != null) {
         await SecureStorage.write('accessToken', _accessToken!);
+        await SecureStorage.write('auth_token', _accessToken!);
       }
 
       _errorMessage = null;
@@ -91,6 +93,42 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
       _setState(AuthState.error);
+    }
+  }
+
+  Future<bool> tryRestoreSession() async {
+    try {
+      final token = await SecureStorage.read('accessToken') ??
+          await SecureStorage.read('auth_token');
+      final refresh = await SecureStorage.read('refreshToken');
+
+      if (token == null || token.isEmpty) {
+        _setState(AuthState.unauthenticated);
+        return false;
+      }
+
+      _accessToken = token;
+      _refreshToken = refresh;
+
+      final user = await getCurrentUser();
+      if (user != null) {
+        _setState(AuthState.authenticated);
+        return true;
+      }
+
+      if (refresh != null && refresh.isNotEmpty) {
+        await refreshAccessToken();
+        if (_authState == AuthState.authenticated) {
+          await getCurrentUser();
+          return true;
+        }
+      }
+
+      _setState(AuthState.unauthenticated);
+      return false;
+    } catch (_) {
+      _setState(AuthState.unauthenticated);
+      return false;
     }
   }
 
@@ -177,6 +215,7 @@ class AuthService extends ChangeNotifier {
     _currentUser = null;
     _errorMessage = null;
     await SecureStorage.delete('accessToken');
+    await SecureStorage.delete('auth_token');
     await SecureStorage.delete('refreshToken');
     _setState(AuthState.unauthenticated);
   }

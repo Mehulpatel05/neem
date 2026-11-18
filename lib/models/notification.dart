@@ -18,16 +18,26 @@
   });
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic d) {
+      if (d == null) return DateTime.now();
+      if (d is DateTime) return d;
+      try {
+        return DateTime.parse(d.toString());
+      } catch (_) {
+        return DateTime.now();
+      }
+    }
+
     return NotificationItem(
-      id: json['id'] as String,
-      type: json['type'] as String,
-      title: json['title'] as String,
-      body: json['body'] as String,
+      id: json['id']?.toString() ?? '',
+      type: json['type']?.toString() ?? 'system',
+      title: json['title']?.toString() ?? '',
+      body: json['body']?.toString() ?? json['message']?.toString() ?? '',
       data: json['data'] != null
           ? Map<String, dynamic>.from(json['data'] as Map)
           : null,
-      isRead: json['isRead'] as bool? ?? false,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      isRead: json['isRead'] == true || json['is_read'] == 1,
+      createdAt: parseDate(json['createdAt'] ?? json['created_at']),
     );
   }
 

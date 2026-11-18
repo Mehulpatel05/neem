@@ -28,7 +28,7 @@ class ApiClient {
 
   static const String _baseUrl =
       String.fromEnvironment('API_BASE_URL', defaultValue: 'http://43.204.215.17');
-  static const String _tokenKey = 'auth_token';
+  static const String _tokenKey = 'accessToken';
 
   static final http.Client _client = http.Client();
 
@@ -44,7 +44,8 @@ class ApiClient {
   }
 
   static Future<Map<String, String>> _headers({Map<String, String>? extra}) async {
-    final token = await SecureStorage.read(_tokenKey);
+    final token = await SecureStorage.read('accessToken') ??
+        await SecureStorage.read('auth_token');
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -111,6 +112,15 @@ class ApiClient {
 
   static Future<void> deleteUserFile(String key) async {
     await post('/api/v1/storage/file', body: {'key': key});
+  }
+
+  static Future<Map<String, dynamic>?> checkAppUpdate() async {
+    try {
+      final response = await get('/api/v1/app/version');
+      return response as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
   }
 
   static Future<dynamic> _request(

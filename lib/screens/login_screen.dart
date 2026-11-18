@@ -24,13 +24,27 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleSendOtp() async {
-    final phone = _phoneController.text.trim();
-    if (phone.isEmpty) {
+    final raw = _phoneController.text.trim();
+    if (raw.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your phone number')),
+        const SnackBar(content: Text('Please enter your mobile number')),
       );
       return;
     }
+
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid 10-digit mobile number')),
+      );
+      return;
+    }
+
+    final phone = digits.length == 10
+        ? '+91$digits'
+        : (digits.startsWith('91') && digits.length == 12
+            ? '+$digits'
+            : '+91${digits.substring(digits.length - 10)}');
 
     setState(() => _isLoading = true);
     final authNotifier = context.read<AuthNotifier>();
@@ -123,13 +137,43 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 32),
                 TextField(
                   controller: _phoneController,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone Number',
-                    hintText: '+91 9876543210',
-                    prefixIcon: Icon(Icons.phone),
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: 'Mobile Number',
+                    hintText: '98765 43210',
+                    prefixIcon: Container(
+                      width: 70,
+                      alignment: Alignment.center,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '+91',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF2E7D32),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          SizedBox(
+                            height: 22,
+                            child: VerticalDivider(
+                              width: 1,
+                              thickness: 1,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    border: const OutlineInputBorder(),
                   ),
-                  keyboardType: TextInputType.phone,
+                  keyboardType: TextInputType.number,
+                  autofillHints: const [],
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  maxLength: 10,
+                  buildCounter: (_, {required currentLength, isFocused, maxLength}) => null,
                   enabled: !_isLoading,
                 ),
                 const SizedBox(height: 16),
@@ -143,6 +187,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
+                    autofillHints: const [],
+                    maxLength: 6,
+                    buildCounter: (_, {required currentLength, isFocused, maxLength}) => null,
                     enabled: !_isLoading,
                   ),
                   const SizedBox(height: 24),

@@ -16,16 +16,16 @@ type Variables = {
 const app = new Hono<{ Variables: Variables }>();
 
 const d1 = new D1Service(
-  process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
-  process.env.CLOUDFLARE_DATABASE_ID ?? "",
-  process.env.CLOUDFLARE_API_TOKEN ?? ""
+  process.env.D1_ACCOUNT_ID ?? process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
+  process.env.D1_DATABASE_ID ?? process.env.CLOUDFLARE_DATABASE_ID ?? "",
+  process.env.D1_API_TOKEN ?? process.env.CLOUDFLARE_API_TOKEN ?? ""
 );
 
 const jwtService = new JWTService(
   process.env.JWT_ACCESS_SECRET ?? "neem-access-secret",
   process.env.JWT_REFRESH_SECRET ?? "neem-refresh-secret",
-  "15m",
-  "7d",
+  process.env.JWT_ACCESS_EXPIRY ?? "15m",
+  process.env.JWT_REFRESH_EXPIRY ?? "30d",
   d1
 );
 

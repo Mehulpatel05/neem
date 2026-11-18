@@ -28,16 +28,26 @@ class Post {
   });
 
   factory Post.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic d) {
+      if (d == null) return DateTime.now();
+      if (d is DateTime) return d;
+      try {
+        return DateTime.parse(d.toString());
+      } catch (_) {
+        return DateTime.now();
+      }
+    }
+
     return Post(
-      id: json['id'] as String,
-      authorId: json['authorId'] as String,
-      category: json['category'] as String,
-      zone: json['zone'] as String,
-      content: json['content'] as String,
-      isAnonymous: json['isAnonymous'] as bool,
-      upvotes: json['upvotes'] as int,
-      bookmarksCount: json['bookmarksCount'] as int,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      id: json['id']?.toString() ?? '',
+      authorId: json['authorId']?.toString() ?? json['author_id']?.toString() ?? '',
+      category: json['category']?.toString() ?? 'General',
+      zone: json['zone']?.toString() ?? json['city']?.toString() ?? 'Neighborhood',
+      content: json['content']?.toString() ?? '',
+      isAnonymous: json['isAnonymous'] == true || json['is_anonymous'] == 1,
+      upvotes: (json['upvoteCount'] ?? json['upvotes'] ?? 0) as int,
+      bookmarksCount: (json['bookmarksCount'] ?? 0) as int,
+      createdAt: parseDate(json['createdAt'] ?? json['created_at']),
       authorName: json['authorName'] as String?,
       authorHandle: json['authorHandle'] as String?,
     );

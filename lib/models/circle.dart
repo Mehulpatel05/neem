@@ -26,18 +26,28 @@ class Circle {
   });
 
   factory Circle.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic d) {
+      if (d == null) return DateTime.now();
+      if (d is DateTime) return d;
+      try {
+        return DateTime.parse(d.toString());
+      } catch (_) {
+        return DateTime.now();
+      }
+    }
+
     return Circle(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String,
-      city: json['city'] as String,
-      zone: json['zone'] as String,
-      creatorId: json['creatorId'] as String,
-      totalSeats: json['totalSeats'] as int,
-      seatsLeft: json['seatsLeft'] as int,
-      isActive: json['isActive'] as bool,
-      eventDate: DateTime.parse(json['eventDate'] as String),
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      city: json['city']?.toString() ?? '',
+      zone: json['zone']?.toString() ?? '',
+      creatorId: json['creatorId']?.toString() ?? json['creator_id']?.toString() ?? '',
+      totalSeats: (json['totalSeats'] ?? json['total_seats'] ?? 10) as int,
+      seatsLeft: (json['seatsLeft'] ?? json['seats_left'] ?? 0) as int,
+      isActive: json['isActive'] == true || json['is_active'] == 1,
+      eventDate: parseDate(json['eventDate'] ?? json['event_date']),
+      createdAt: parseDate(json['createdAt'] ?? json['created_at']),
     );
   }
 

@@ -39,6 +39,18 @@ const authMiddleware = async (c: any, next: any) => {
   }
 };
 
+const optionalAuthMiddleware = async (c: any, next: any) => {
+  const authHeader = c.req.header("Authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.slice("Bearer ".length);
+    try {
+      const payload = jwtService.verifyAccessToken(token);
+      c.set("userId", payload.sub);
+    } catch {}
+  }
+  await next();
+};
+
 const paginationSchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().max(100).optional(),
@@ -50,52 +62,69 @@ const idParamSchema = z.object({
 
 const createPostSchema = z.object({
   content: z.string().min(1).max(280),
+  category: z.string().max(100).optional(),
   city: z.string().min(1).max(100).optional(),
   zone: z.string().min(1).max(100).optional(),
+  isAnonymous: z.boolean().optional(),
 });
 
 function toPublicPost(row: Record<string, unknown>, viewerId?: string) {
   let upvotedByViewer = false;
   let bookmarkedByViewer = false;
   try {
-    upvotedByViewer = viewerId ? Boolean(row.upvoted_by_viewer) : false;
+    upvotedByViewer = viewerId ? Boolean(row.upvotedByViewer || row.upvoted_by_viewer) : false;
   } catch {
     upvotedByViewer = false;
   }
   try {
-    bookmarkedByViewer = viewerId ? Boolean(row.bookmarked_by_viewer) : false;
+    bookmarkedByViewer = viewerId ? Boolean(row.bookmarkedByViewer || row.bookmarked_by_viewer) : false;
   } catch {
     bookmarkedByViewer = false;
   }
 
+  const isAnon = Boolean(row.isAnonymous || row.is_anonymous);
+  const authorName = isAnon
+    ? null
+    : ((row.authorName ?? row.author_name ?? row.name ?? null) as string | null);
+  const authorHandle = isAnon
+    ? null
+    : ((row.authorHandle ?? row.author_handle ?? row.handle ?? null) as string | null);
+
   return {
     id: row.id,
-    authorId: row.author_id,
+    authorId: row.authorId ?? row.author_id,
     content: row.content,
-    city: row.city,
-    zone: row.zone,
-    upvoteCount: Number(row.upvote_count ?? 0),
-    replyCount: Number(row.reply_count ?? 0),
-    isBlocked: Boolean(row.is_blocked),
+    category: (row.category as string) || "General",
+    city: (row.city as string) || "Local",
+    zone: (row.zone as string) || "Neighborhood",
+    isAnonymous: isAnon,
+    authorName,
+    authorHandle,
+    upvoteCount: Number(row.upvoteCount ?? row.upvote_count ?? 0),
+    upvotes: Number(row.upvoteCount ?? row.upvote_count ?? 0),
+    replyCount: Number(row.replyCount ?? row.reply_count ?? 0),
+    bookmarksCount: 0,
+    isBlocked: Boolean(row.isBlocked ?? row.is_blocked),
     upvotedByViewer,
     bookmarkedByViewer,
-    createdAt: row.created_at,
+    createdAt: row.createdAt ?? row.created_at,
   };
 }
 
-// GET /posts - list posts with pagination
-app.get("/", authMiddleware, async (c) => {
-  const viewerId = c.get("userId");
+app.get("/", optionalAuthMiddleware, async (c) => {
+  const viewerId = c.get("userId") ?? "";
   const { page = 1, limit = 20 } = paginationSchema.parse(c.req.query());
   const offset = (page - 1) * limit;
 
   const rows = await d1
     .prepare(
-      `SELECT p.id, p.author_id AS authorId, p.content, p.city, p.zone, p.upvote_count AS upvoteCount,
-              p.reply_count AS replyCount, p.is_blocked AS isBlocked, p.created_at AS createdAt,
-              EXISTS(SELECT 1 FROM upvotes u WHERE u.post_id = p.id AND u.user_id = ?) AS upvotedByViewer,
+      `SELECT p.id, p.author_id AS authorId, p.content, p.category, p.city, p.zone, p.is_anonymous AS isAnonymous,
+              p.upvote_count AS upvoteCount, p.reply_count AS replyCount, p.is_blocked AS isBlocked, p.created_at AS createdAt,
+              u.name AS authorName, u.handle AS authorHandle,
+              EXISTS(SELECT 1 FROM upvotes u2 WHERE u2.post_id = p.id AND u2.user_id = ?) AS upvotedByViewer,
               EXISTS(SELECT 1 FROM bookmarks b WHERE b.post_id = p.id AND b.user_id = ?) AS bookmarkedByViewer
        FROM posts p
+       LEFT JOIN users u ON u.id = p.author_id
        WHERE p.is_blocked = 0
        ORDER BY p.created_at DESC
        LIMIT ? OFFSET ?`
@@ -110,18 +139,19 @@ app.get("/", authMiddleware, async (c) => {
   });
 });
 
-// GET /posts/:id - get a single post
-app.get("/:id", authMiddleware, async (c) => {
+app.get("/:id", optionalAuthMiddleware, async (c) => {
   const { id } = idParamSchema.parse(c.req.param());
-  const viewerId = c.get("userId");
+  const viewerId = c.get("userId") ?? "";
 
   const row = await d1
     .prepare(
-      `SELECT p.id, p.author_id AS authorId, p.content, p.city, p.zone, p.upvote_count AS upvoteCount,
-              p.reply_count AS replyCount, p.is_blocked AS isBlocked, p.created_at AS createdAt,
-              EXISTS(SELECT 1 FROM upvotes u WHERE u.post_id = p.id AND u.user_id = ?) AS upvotedByViewer,
+      `SELECT p.id, p.author_id AS authorId, p.content, p.category, p.city, p.zone, p.is_anonymous AS isAnonymous,
+              p.upvote_count AS upvoteCount, p.reply_count AS replyCount, p.is_blocked AS isBlocked, p.created_at AS createdAt,
+              u.name AS authorName, u.handle AS authorHandle,
+              EXISTS(SELECT 1 FROM upvotes u2 WHERE u2.post_id = p.id AND u2.user_id = ?) AS upvotedByViewer,
               EXISTS(SELECT 1 FROM bookmarks b WHERE b.post_id = p.id AND b.user_id = ?) AS bookmarkedByViewer
        FROM posts p
+       LEFT JOIN users u ON u.id = p.author_id
        WHERE p.id = ?`
     )
     .bind(viewerId, viewerId, id)
@@ -134,7 +164,6 @@ app.get("/:id", authMiddleware, async (c) => {
   return c.json({ post: toPublicPost(row as Record<string, unknown>, viewerId) });
 });
 
-// POST /posts - create a post
 app.post("/", authMiddleware, async (c) => {
   const userId = c.get("userId");
 
@@ -144,27 +173,52 @@ app.post("/", authMiddleware, async (c) => {
     return c.json({ error: "Validation error", issues: result.error.flatten().fieldErrors }, 400);
   }
 
-  const { content, city, zone } = result.data;
+  const { content, category, city, zone, isAnonymous } = result.data;
+  const postId = crypto.randomUUID();
 
   await d1
     .prepare(
-      `INSERT INTO posts (id, author_id, content, city, zone, upvote_count, reply_count, is_blocked, created_at)
-       VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, 0, 0, 0, datetime('now'))`
+      `INSERT INTO posts (id, author_id, content, category, city, zone, is_anonymous, upvote_count, reply_count, is_blocked, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, datetime('now'))`
     )
-    .bind(userId, content, city ?? null, zone ?? null)
+    .bind(
+      postId,
+      userId,
+      content,
+      category ?? "General",
+      city ?? null,
+      zone ?? null,
+      isAnonymous ? 1 : 0
+    )
     .run();
 
   const row = await d1
-    .prepare(`SELECT id FROM posts WHERE author_id = ? ORDER BY created_at DESC LIMIT 1`)
-    .bind(userId)
+    .prepare(
+      `SELECT p.id, p.author_id AS authorId, p.content, p.category, p.city, p.zone, p.is_anonymous AS isAnonymous,
+              p.upvote_count AS upvoteCount, p.reply_count AS replyCount, p.is_blocked AS isBlocked, p.created_at AS createdAt,
+              u.name AS authorName, u.handle AS authorHandle
+       FROM posts p
+       LEFT JOIN users u ON u.id = p.author_id
+       WHERE p.id = ?`
+    )
+    .bind(postId)
     .first();
 
-  if (!row) {
-    return c.json({ error: "Failed to create post" }, 500);
-  }
-
   return c.json(
-    { post: toPublicPost({ id: (row as Record<string, unknown>).id, author_id: userId, content, city, zone, upvote_count: 0, reply_count: 0, is_blocked: 0, created_at: new Date().toISOString() } as Record<string, unknown>, userId) },
+    {
+      post: toPublicPost(
+        (row ?? {
+          id: postId,
+          authorId: userId,
+          content,
+          category,
+          city,
+          zone,
+          isAnonymous,
+        }) as Record<string, unknown>,
+        userId
+      ),
+    },
     201
   );
 });
