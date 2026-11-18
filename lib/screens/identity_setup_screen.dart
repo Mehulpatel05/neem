@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/auth/auth_service.dart';
 import '../../app_router.dart';
@@ -62,14 +63,14 @@ class _IdentitySetupScreenState extends State<IdentitySetupScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
-      await ApiClient.post('/api/v1/profile', body: {
-        'displayName': _displayNameController.text.trim(),
-        'handle': _handleController.text.trim().isEmpty
+      await context.read<AuthNotifier>().saveProfile(
+        displayName: _displayNameController.text.trim(),
+        handle: _handleController.text.trim().isEmpty
             ? null
             : _handleController.text.trim(),
-        'city': _selectedCity,
-        'zone': _selectedZone,
-      });
+        city: _selectedCity,
+        zone: _selectedZone,
+      );
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(AppRouter.profileSaved);
       }

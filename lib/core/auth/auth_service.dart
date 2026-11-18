@@ -97,14 +97,55 @@ class AuthService extends ChangeNotifier {
   Future<Map<String, dynamic>?> getCurrentUser() async {
     try {
       final response = await ApiClient.get('/api/v1/auth/me');
-      _currentUser = response as Map<String, dynamic>?;
+      final user = response is Map<String, dynamic> ? (response['user'] ?? response) : null;
+      _currentUser = user as Map<String, dynamic>?;
+      if (_currentUser == null) {
+        _currentUser = await ApiClient.getUserData();
+      }
       notifyListeners();
       return _currentUser;
     } catch (e) {
+      try {
+        _currentUser = await ApiClient.getUserData();
+        if (_currentUser != null) {
+          notifyListeners();
+          return _currentUser;
+        }
+      } catch (_) {}
       _errorMessage = e.toString();
       _currentUser = null;
       notifyListeners();
       return null;
+    }
+  }
+
+  Future<void> saveProfile({
+    String? displayName,
+    String? handle,
+    String? city,
+    String? zone,
+    List<String>? interests,
+    String? avatarUrl,
+  }) async {
+    try {
+      final body = <String, dynamic>{};
+      if (displayName != null) body['displayName'] = displayName;
+      if (handle != null) body['handle'] = handle;
+      if (city != null) body['city'] = city;
+      if (zone != null) body['zone'] = zone;
+      if (interests != null) body['interests'] = interests;
+      if (avatarUrl != null) body['avatarUrl'] = avatarUrl;
+
+      final response = await ApiClient.put('/api/v1/users/me', body: body);
+      final user = response is Map<String, dynamic> ? (response['user'] ?? response) : null;
+      _currentUser = user as Map<String, dynamic>?;
+      if (_currentUser != null) {
+        await ApiClient.saveUserData(_currentUser!);
+      }
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
     }
   }
 
@@ -114,7 +155,11 @@ class AuthService extends ChangeNotifier {
         '/api/v1/users/me/interests',
         body: {'interests': interests},
       );
-      _currentUser = response as Map<String, dynamic>?;
+      final user = response is Map<String, dynamic> ? (response['user'] ?? response) : null;
+      _currentUser = user as Map<String, dynamic>?;
+      if (_currentUser != null) {
+        await ApiClient.saveUserData(_currentUser!);
+      }
       notifyListeners();
     } catch (e) {
       _errorMessage = e.toString();
@@ -125,9 +170,7 @@ class AuthService extends ChangeNotifier {
   Future<void> logout() async {
     try {
       await ApiClient.post('/api/v1/auth/logout', body: {});
-    } catch (_) {
-      // Ignore logout errors; always clear local state
-    }
+    } catch (_) {}
 
     _accessToken = null;
     _refreshToken = null;

@@ -1,5 +1,8 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../core/providers/app_providers.dart';
+import '../../core/network/api_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/app_avatar.dart';
@@ -138,10 +141,61 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
     ),
   ];
 
+  List<dynamic> _r2Files = [];
+  bool _isLoadingFiles = false;
+  String? _storageError;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
+    _loadCloudFiles();
+  }
+
+  Future<void> _loadCloudFiles() async {
+    setState(() => _isLoadingFiles = true);
+    try {
+      final files = await ApiClient.listUserFiles();
+      if (mounted) {
+        setState(() {
+          _r2Files = files;
+          _isLoadingFiles = false;
+          _storageError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingFiles = false;
+          _storageError = e.toString();
+        });
+      }
+    }
+  }
+
+  Future<void> _syncToCloud() async {
+    final authNotifier = context.read<AuthNotifier>();
+    final user = authNotifier.currentUser;
+    if (user != null) {
+      try {
+        await ApiClient.saveUserData(user);
+        await _loadCloudFiles();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile synced to your Cloud R2 folder!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Sync error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -185,6 +239,7 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
                   _buildBookmarksTab(theme, colorScheme),
                   _buildCirclesTab(theme, colorScheme),
                   _buildBadgesTab(theme, colorScheme),
+                  _buildCloudFilesTab(theme, colorScheme),
                 ],
               ),
             ),
@@ -200,6 +255,13 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
   }
 
   Widget _buildHeader(ThemeData theme, ColorScheme colorScheme) {
+    final currentUser = context.watch<AuthNotifier>().currentUser;
+    final displayName = currentUser?['displayName'] ?? currentUser?['name'] ?? _user.displayName;
+    final handle = currentUser?['handle'] ?? _user.handle ?? '';
+    final city = currentUser?['city'] ?? _user.city ?? 'Local';
+    final zone = currentUser?['zone'] ?? _user.zone ?? 'Community';
+    final avatarUrl = currentUser?['avatarUrl'] ?? _user.avatarUrl;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -214,13 +276,13 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
       child: Column(
         children: [
           AppAvatar(
-            imageUrl: _user.avatarUrl,
-            name: _user.displayName,
+            imageUrl: avatarUrl,
+            name: displayName,
             radius: 44,
           ),
           const SizedBox(height: 12),
           Text(
-            _user.displayName,
+            displayName,
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w700,
               color: colorScheme.onSurface,
@@ -228,7 +290,7 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            _user.handle ?? '',
+            handle,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurface.withOpacity(0.6),
             ),
@@ -251,7 +313,7 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
               ),
               const SizedBox(width: 12),
               AppChip(
-                label: '${_user.city}, ${_user.zone}',
+                label: '$city, $zone',
                 avatar: const Icon(
                   Icons.location_on,
                   size: 16,
@@ -303,6 +365,7 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
           Tab(text: 'Bookmarks'),
           Tab(text: 'My Circles'),
           Tab(text: 'Trust Badges'),
+          Tab(text: 'My Cloud Files'),
         ],
       ),
     );
@@ -482,6 +545,116 @@ class _ProfileSavedScreenState extends State<ProfileSavedScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildCloudFilesTab(ThemeData theme, ColorScheme colorScheme) {
+    if (_isLoadingFiles) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'My R2 Cloud Storage (${_r2Files.length})',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _loadCloudFiles,
+                    tooltip: 'Refresh files',
+                  ),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.cloud_upload, size: 16),
+                    label: const Text('Sync Profile'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: _syncToCloud,
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (_storageError != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(_storageError!, style: const TextStyle(color: Colors.red)),
+            ),
+          if (_r2Files.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceVariant.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Column(
+                children: [
+                  Icon(Icons.folder_open, size: 48, color: Colors.grey),
+                  SizedBox(height: 8),
+                  Text(
+                    'Your dedicated R2 folder is ready: users/{userId}/',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Tap Sync Profile above to save your profile into your private R2 folder.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
+                ],
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _r2Files.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final file = _r2Files[index];
+                final key = file['key']?.toString() ?? '';
+                final size = file['size'] ?? 0;
+                final filename = key.split('/').last;
+                final parts = key.split('/');
+                final folder = parts.length > 2 ? parts[parts.length - 2] : 'root';
+
+                return ListTile(
+                  tileColor: colorScheme.surfaceVariant.withOpacity(0.3),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  leading: Icon(
+                    folder == 'data'
+                        ? Icons.data_object
+                        : folder == 'audio'
+                            ? Icons.audiotrack
+                            : Icons.insert_drive_file,
+                    color: AppColors.primary,
+                  ),
+                  title: Text(filename, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text('$key • ${(size / 1024).toStringAsFixed(1)} KB'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: () async {
+                      await ApiClient.deleteUserFile(key);
+                      _loadCloudFiles();
+                    },
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
     );
   }
 }

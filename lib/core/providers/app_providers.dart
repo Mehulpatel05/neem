@@ -44,6 +44,24 @@ class AuthNotifier extends ChangeNotifier {
     return await _authService.getCurrentUser();
   }
 
+  Future<void> saveProfile({
+    String? displayName,
+    String? handle,
+    String? city,
+    String? zone,
+    List<String>? interests,
+    String? avatarUrl,
+  }) async {
+    await _authService.saveProfile(
+      displayName: displayName,
+      handle: handle,
+      city: city,
+      zone: zone,
+      interests: interests,
+      avatarUrl: avatarUrl,
+    );
+  }
+
   Future<void> logout() async {
     await _authService.logout();
   }

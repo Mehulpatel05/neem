@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { D1Service } from "../services/d1.service";
 import { JWTService } from "../services/jwt.service";
+import { R2Service } from "../services/r2.service";
 
 type Variables = {
   userId: string;
@@ -13,6 +14,14 @@ const d1 = new D1Service(
   process.env.D1_ACCOUNT_ID ?? "",
   process.env.D1_DATABASE_ID ?? "",
   process.env.D1_API_TOKEN ?? ""
+);
+
+const r2 = new R2Service(
+  process.env.R2_ACCOUNT_ID ?? "",
+  process.env.R2_ACCESS_KEY_ID ?? "",
+  process.env.R2_SECRET_ACCESS_KEY ?? "",
+  process.env.R2_BUCKET_NAME ?? "neem",
+  process.env.R2_PUBLIC_URL ?? ""
 );
 
 const jwtService = new JWTService(
@@ -85,14 +94,21 @@ app.get("/me", authMiddleware, async (c) => {
     .bind(userId)
     .first();
 
-  if (!row) {
-    return c.json({ error: "User not found" }, 404);
+  if (row) {
+    return c.json({ user: toPublicUser(row as Record<string, unknown>) });
   }
 
-  return c.json({ user: toPublicUser(row as Record<string, unknown>) });
+  try {
+    const key = r2.getUserKey(userId, "data", "user_data.json");
+    const r2Obj = await r2.getObject(key);
+    const stored = JSON.parse(r2Obj.data.toString("utf-8"));
+    return c.json({ user: stored });
+  } catch {
+    return c.json({ error: "User not found" }, 404);
+  }
 });
 
-app.put("/me", authMiddleware, async (c) => {
+const handleUpdateProfile = async (c: any) => {
   const userId = c.get("userId");
 
   const body = await c.req.json();
@@ -131,13 +147,10 @@ app.put("/me", authMiddleware, async (c) => {
     params.push(avatarUrl);
   }
 
-  if (updates.length === 0) {
-    return c.json({ error: "No fields to update" }, 400);
+  if (updates.length > 0) {
+    params.push(userId);
+    await d1.run(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, params);
   }
-
-  params.push(userId);
-
-  await d1.run(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, params);
 
   const row = await d1
     .prepare(
@@ -150,8 +163,21 @@ app.put("/me", authMiddleware, async (c) => {
     return c.json({ error: "User not found" }, 404);
   }
 
-  return c.json({ user: toPublicUser(row as Record<string, unknown>) });
-});
+  const publicUser = toPublicUser(row as Record<string, unknown>);
+  try {
+    const key = r2.getUserKey(userId, "data", "user_data.json");
+    await r2.putObject(key, JSON.stringify(publicUser, null, 2), "application/json");
+  } catch (err: any) {
+    console.error("R2 profile sync failed:", err?.message || err);
+  }
+
+  return c.json({ user: publicUser });
+};
+
+app.put("/me", authMiddleware, handleUpdateProfile);
+app.post("/me", authMiddleware, handleUpdateProfile);
+app.post("/", authMiddleware, handleUpdateProfile);
+app.put("/", authMiddleware, handleUpdateProfile);
 
 app.get("/:id", async (c) => {
   const { id } = idParamSchema.parse(c.req.param());

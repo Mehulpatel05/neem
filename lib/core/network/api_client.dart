@@ -74,6 +74,45 @@ class ApiClient {
       {Map<String, String>? headers, Object? body}) =>
       _request('PATCH', path, headers: headers, body: body);
 
+  static Future<Map<String, dynamic>> uploadUserFile({
+    required String folder,
+    required String filename,
+    required List<int> bytes,
+    String contentType = 'application/octet-stream',
+  }) async {
+    final base64Data = base64Encode(bytes);
+    final response = await post('/api/v1/storage/upload', body: {
+      'folder': folder,
+      'filename': filename,
+      'contentType': contentType,
+      'data': base64Data,
+    });
+    return response as Map<String, dynamic>;
+  }
+
+  static Future<List<dynamic>> listUserFiles([String? folder]) async {
+    final query = folder != null ? '?folder=$folder' : '';
+    final response = await get('/api/v1/storage/files$query');
+    return (response['files'] as List<dynamic>?) ?? [];
+  }
+
+  static Future<Map<String, dynamic>?> getUserData() async {
+    try {
+      final response = await get('/api/v1/storage/user-data');
+      return response['data'] as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveUserData(Map<String, dynamic> data) async {
+    await post('/api/v1/storage/user-data', body: data);
+  }
+
+  static Future<void> deleteUserFile(String key) async {
+    await post('/api/v1/storage/file', body: {'key': key});
+  }
+
   static Future<dynamic> _request(
     String method,
     String path, {

@@ -13,6 +13,7 @@ import messagesRoutes from "./routes/messages";
 import aiRoutes from "./routes/ai";
 import usersRoutes from "./routes/users";
 import notificationsRoutes from "./routes/notifications";
+import storageRoutes from "./routes/storage";
 
 const app = new Hono();
 
@@ -42,16 +43,19 @@ app.route("/circles", circlesRoutes);
 app.route("/messages", messagesRoutes);
 app.route("/ai", aiRoutes);
 app.route("/users", usersRoutes);
+app.route("/profile", usersRoutes);
 app.route("/notifications", notificationsRoutes);
+app.route("/storage", storageRoutes);
 
-// API v1 aliases for mobile and web clients
 app.route("/api/v1/auth", authRoutes);
 app.route("/api/v1/posts", postsRoutes);
 app.route("/api/v1/circles", circlesRoutes);
 app.route("/api/v1/messages", messagesRoutes);
 app.route("/api/v1/ai", aiRoutes);
 app.route("/api/v1/users", usersRoutes);
+app.route("/api/v1/profile", usersRoutes);
 app.route("/api/v1/notifications", notificationsRoutes);
+app.route("/api/v1/storage", storageRoutes);
 
 app.notFound((c) => {
   return c.json({ error: "Not found" }, 404);

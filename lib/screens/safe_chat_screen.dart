@@ -116,7 +116,7 @@ class _SafeChatScreenState extends State<SafeChatScreen> {
               senderId: _currentUserId,
               content: _voiceSeconds.toString(),
               type: 'voice',
-              mediaUrl: 'https://example.com/voice-${DateTime.now().millisecondsSinceEpoch}.aac',
+              mediaUrl: 'http://43.204.215.17/storage/users/$_currentUserId/audio/voice_${DateTime.now().millisecondsSinceEpoch}.aac',
               createdAt: DateTime.now(),
             ),
           );
@@ -144,7 +144,7 @@ class _SafeChatScreenState extends State<SafeChatScreen> {
           senderId: _currentUserId,
           content: 'Image',
           type: 'image',
-          mediaUrl: 'https://example.com/image-${DateTime.now().millisecondsSinceEpoch}.jpg',
+          mediaUrl: 'http://43.204.215.17/storage/users/$_currentUserId/media/image_${DateTime.now().millisecondsSinceEpoch}.jpg',
           createdAt: DateTime.now(),
         ),
       );
