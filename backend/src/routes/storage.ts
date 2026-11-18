@@ -141,6 +141,22 @@ app.get("/users/:userId/:folder/:filename", async (c) => {
   }
 });
 
+app.get("/updates/:filename", async (c) => {
+  const filename = c.req.param("filename");
+  const key = `updates/${filename}`;
+  try {
+    const obj = await r2.getObject(key);
+    return new Response(obj.data, {
+      headers: {
+        "Content-Type": "application/vnd.android.package-archive",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      },
+    });
+  } catch {
+    return c.json({ error: "Update package not found" }, 404);
+  }
+});
+
 app.get("/user-data", authMiddleware, async (c) => {
   const userId = c.get("userId");
   const key = r2.getUserKey(userId, "data", "user_data.json");
