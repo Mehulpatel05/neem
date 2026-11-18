@@ -44,6 +44,15 @@ app.route("/ai", aiRoutes);
 app.route("/users", usersRoutes);
 app.route("/notifications", notificationsRoutes);
 
+// API v1 aliases for mobile and web clients
+app.route("/api/v1/auth", authRoutes);
+app.route("/api/v1/posts", postsRoutes);
+app.route("/api/v1/circles", circlesRoutes);
+app.route("/api/v1/messages", messagesRoutes);
+app.route("/api/v1/ai", aiRoutes);
+app.route("/api/v1/users", usersRoutes);
+app.route("/api/v1/notifications", notificationsRoutes);
+
 app.notFound((c) => {
   return c.json({ error: "Not found" }, 404);
 });

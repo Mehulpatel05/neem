@@ -46,7 +46,8 @@ const authMiddleware = async (c: any, next: any) => {
 };
 
 const requestOtpSchema = z.object({
-  phoneNumber: z.string().min(1),
+  phoneNumber: z.string().min(1).optional(),
+  phone: z.string().min(1).optional(),
 });
 
 const verifyOtpSchema = z.object({
@@ -85,15 +86,19 @@ app.post("/request-otp", async (c) => {
     return c.json({ error: "Validation error", issues: result.error.flatten().fieldErrors }, 400);
   }
 
-  const { phoneNumber } = result.data;
+  const phoneNumber = result.data.phoneNumber ?? result.data.phone;
+  if (!phoneNumber) {
+    return c.json({ error: "Validation error", message: "phoneNumber or phone is required" }, 400);
+  }
   const requestId = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
   let wakitRequestId: string;
   try {
     wakitRequestId = await wakit.requestOtp(phoneNumber);
-  } catch {
-    return c.json({ error: "Failed to request OTP" }, 502);
+  } catch (err: any) {
+    console.error("Wakit requestOtp error:", err?.message || err);
+    return c.json({ error: "Failed to request OTP", details: err?.message }, 502);
   }
 
   await d1.run(
@@ -132,8 +137,9 @@ app.post("/verify-otp", async (c) => {
   let verified: boolean;
   try {
     verified = await wakit.verifyOtp(wakitRequestId, otp);
-  } catch {
-    return c.json({ error: "Failed to verify OTP" }, 502);
+  } catch (err: any) {
+    console.error("Wakit verifyOtp error:", err?.message || err);
+    return c.json({ error: "Failed to verify OTP", details: err?.message }, 502);
   }
 
   if (!verified) {

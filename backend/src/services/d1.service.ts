@@ -21,8 +21,21 @@ export class D1Service {
   private readonly apiToken: string;
 
   constructor(accountId: string, databaseId: string, apiToken: string) {
-    this.baseUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}`;
-    this.apiToken = apiToken;
+    let accId = accountId || process.env.D1_ACCOUNT_ID || "";
+    let dbId = databaseId || process.env.D1_DATABASE_ID || "";
+    const dbUrl = process.env.D1_DATABASE_URL || "";
+
+    if (!dbId && dbUrl) {
+      const match = dbUrl.match(/database\/([a-f0-9-]+)/i);
+      if (match) dbId = match[1];
+    }
+    if (!accId && dbUrl) {
+      const match = dbUrl.match(/accounts\/([a-f0-9]+)/i);
+      if (match) accId = match[1];
+    }
+
+    this.baseUrl = `https://api.cloudflare.com/client/v4/accounts/${accId}/d1/database/${dbId}`;
+    this.apiToken = apiToken || process.env.D1_API_TOKEN || "";
   }
 
   private headers(): Record<string, string> {

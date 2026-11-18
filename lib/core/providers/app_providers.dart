@@ -28,12 +28,12 @@ class AuthNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loginWithPhone(String phone) async {
-    await _authService.loginWithPhone(phone);
+  Future<String?> loginWithPhone(String phone) async {
+    return await _authService.loginWithPhone(phone);
   }
 
-  Future<void> verifyOtp(String requestId, String otp) async {
-    await _authService.verifyOtp(requestId, otp);
+  Future<bool> verifyOtp(String otp, [String? requestId]) async {
+    return await _authService.verifyOtp(otp, requestId);
   }
 
   Future<void> refreshAccessToken() async {

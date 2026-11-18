@@ -10,32 +10,44 @@ class AuthService extends ChangeNotifier {
   String? _refreshToken;
   Map<String, dynamic>? _currentUser;
   String? _errorMessage;
+  String? _pendingRequestId;
 
   AuthState get authState => _authState;
   String? get accessToken => _accessToken;
   String? get refreshToken => _refreshToken;
   Map<String, dynamic>? get currentUser => _currentUser;
   String? get errorMessage => _errorMessage;
+  String? get pendingRequestId => _pendingRequestId;
 
-  Future<void> loginWithPhone(String phone) async {
+  Future<String?> loginWithPhone(String phone) async {
     _setState(AuthState.authenticating);
     try {
       final response = await ApiClient.post('/api/v1/auth/request-otp', body: {
+        'phoneNumber': phone,
         'phone': phone,
       });
+      _pendingRequestId = response['requestId'] as String?;
       _errorMessage = null;
-      notifyListeners();
+      _setState(AuthState.unauthenticated);
+      return _pendingRequestId;
     } catch (e) {
       _errorMessage = e.toString();
       _setState(AuthState.error);
+      return null;
     }
   }
 
-  Future<void> verifyOtp(String requestId, String otp) async {
+  Future<bool> verifyOtp(String otp, [String? requestId]) async {
     _setState(AuthState.authenticating);
+    final reqId = requestId ?? _pendingRequestId;
+    if (reqId == null || reqId.isEmpty) {
+      _errorMessage = 'No pending OTP request found. Please request OTP first.';
+      _setState(AuthState.error);
+      return false;
+    }
     try {
       final response = await ApiClient.post('/api/v1/auth/verify-otp', body: {
-        'requestId': requestId,
+        'requestId': reqId,
         'otp': otp,
       });
 
@@ -51,9 +63,11 @@ class AuthService extends ChangeNotifier {
 
       await getCurrentUser();
       _setState(AuthState.authenticated);
+      return true;
     } catch (e) {
       _errorMessage = e.toString();
       _setState(AuthState.error);
+      return false;
     }
   }
 
